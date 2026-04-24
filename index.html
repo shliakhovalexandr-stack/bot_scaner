@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>Photo Scan</title>
+    <title>Kabak Scan</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: sans-serif; height: 100vh; overflow: hidden; }
-        #video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
+        #video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
         canvas { display: none; }
         .ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; z-index: 10; }
         .target-box { width: 260px; height: 180px; border: 3px solid #00e676; border-radius: 15px; position: relative; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); }
         .controls { position: absolute; bottom: 80px; pointer-events: auto; width: 100%; text-align: center; }
-        #capture-btn { background: #ff1744; border: 5px solid #fff; width: 70px; height: 70px; border-radius: 50%; cursor: pointer; box-shadow: 0 0 15px rgba(0,0,0,0.5); display: inline-block; }
-        #status { position: absolute; top: 40px; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 14px; color: #00e676; text-align: center; width: 80%; }
+        #capture-btn { background: #ff1744; border: 5px solid #fff; width: 70px; height: 70px; border-radius: 50%; cursor: pointer; display: none; }
+        #init-btn { background: #00e676; border: none; padding: 15px 30px; border-radius: 30px; font-weight: bold; pointer-events: auto; }
+        #status { position: absolute; top: 40px; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 14px; color: #00e676; }
     </style>
 </head>
 <body>
@@ -22,13 +23,13 @@
     <canvas id="canvas"></canvas>
     
     <div class="ui">
-        <div id="status">Завантаження камери...</div>
+        <div id="status">Натисніть кнопку для запуску</div>
         <div class="target-box"></div>
         <div class="controls">
+            <button id="init-btn">УВІМКНУТИ КАМЕРУ</button>
             <button id="capture-btn"></button>
-            <p style="margin-top:10px; font-weight:bold; letter-spacing: 1px;">НАТИСНІТЬ ДЛЯ СКАНУ</p>
         </div>
-        <button onclick="window.Telegram.WebApp.close()" style="position: absolute; bottom: 20px; pointer-events: auto; color:#ccc; background:none; border:none; font-size: 14px;">Скасувати</button>
+        <button onclick="window.Telegram.WebApp.close()" style="position: absolute; bottom: 20px; pointer-events: auto; color:#ccc; background:none; border:none;">Закрити</button>
     </div>
 
     <script>
@@ -38,6 +39,7 @@
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const captureBtn = document.getElementById('capture-btn');
+        const initBtn = document.getElementById('init-btn');
         const status = document.getElementById('status');
         const codeReader = new ZXing.BrowserMultiFormatReader();
 
@@ -47,52 +49,44 @@
         hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
         codeReader.setHints(hints);
 
-        async function startCamera() {
+        initBtn.onclick = async () => {
+            status.innerText = "Запуск...";
             try {
+                // Мінімальний запит без жорстких параметрів якості
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
+                    video: { facingMode: "environment" } 
                 });
                 video.srcObject = stream;
-                // Примусовий запуск для iOS
-                video.onloadedmetadata = () => {
-                    video.play();
-                    status.innerText = "Наведіть на код та натисніть";
-                };
+                await video.play();
+                
+                initBtn.style.display = 'none';
+                captureBtn.style.display = 'inline-block';
+                status.innerText = "Наведіть та натисніть";
             } catch (err) {
-                status.innerText = "Помилка камери: " + err.message;
+                alert("Доступ заборонено: " + err.message);
+                status.innerText = "Помилка доступу";
             }
-        }
+        };
 
         captureBtn.onclick = async () => {
-            if (video.readyState < 2) return; // Відео ще не готове
-
-            status.innerText = "АНАЛІЗ ФОТО...";
-            status.style.color = "#ffeb3b";
-
-            // Робимо знімок
+            status.innerText = "АНАЛІЗ...";
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             try {
-                // Скануємо отримане фото
                 const result = await codeReader.decodeFromCanvas(canvas);
                 if (result) {
-                    status.innerText = "ЗЧИТАНО!";
-                    status.style.color = "#00e676";
                     if (navigator.vibrate) navigator.vibrate(100);
                     tg.sendData(result.text);
                     setTimeout(() => tg.close(), 500);
                 }
             } catch (err) {
-                status.innerText = "Не розпізнано. Спробуйте інший ракурс";
-                status.style.color = "#ff1744";
-                if (navigator.vibrate) navigator.vibrate(50);
+                status.innerText = "Не розпізнано. Спробуйте ще раз";
+                setTimeout(() => { if(status.innerText.includes("Не")) status.innerText = "Наведіть та натисніть"; }, 2000);
             }
         };
-
-        window.onload = startCamera;
     </script>
 </body>
 </html>
