@@ -3,30 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>Kabak Group Scanner</title>
+    <title>Scanner</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; padding: 0; background-color: #000; color: #fff; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
-        #scanner-container { position: relative; width: 100%; flex-grow: 1; overflow: hidden; background: #000; }
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #scanner-container { position: relative; width: 100%; flex-grow: 1; background: #000; }
         #video { width: 100%; height: 100%; object-fit: cover; }
-        .ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
-        .header { background: rgba(0,0,0,0.7); padding: 20px; text-align: center; }
-        .header h2 { margin: 0; font-size: 18px; color: #00e676; letter-spacing: 1px; }
-        .laser-line { position: absolute; top: 50%; left: 10%; width: 80%; height: 2px; background-color: #ff1744; box-shadow: 0 0 12px 3px rgba(255, 23, 68, 0.7); animation: scanning 2s infinite ease-in-out; }
-        @keyframes scanning { 0%, 100% { transform: translateY(-100px); } 50% { transform: translateY(100px); } }
-        .footer { padding: 30px; display: flex; justify-content: center; pointer-events: auto; background: rgba(0,0,0,0.5); }
-        #close-btn { background: #333; border: 1px solid #555; color: #fff; padding: 12px 40px; border-radius: 30px; font-size: 14px; }
+        .ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; align-items: center; z-index: 10; }
+        .header { background: rgba(0,0,0,0.8); width: 100%; padding: 20px 0; text-align: center; }
+        #start-btn { pointer-events: auto; background: #00e676; border: none; padding: 15px 30px; border-radius: 30px; font-weight: bold; font-size: 16px; margin-top: 10px; box-shadow: 0 4px 15px rgba(0,230,118,0.4); }
+        .laser-line { position: absolute; top: 50%; width: 80%; height: 2px; background: #ff1744; box-shadow: 0 0 10px #ff1744; animation: scan 2s infinite; }
+        @keyframes scan { 0%, 100% { transform: translateY(-100px); } 50% { transform: translateY(100px); } }
+        .footer { position: absolute; bottom: 30px; pointer-events: auto; }
+        #close-btn { background: rgba(255,255,255,0.2); border: 1px solid #fff; color: #fff; padding: 10px 30px; border-radius: 20px; }
     </style>
 </head>
 <body>
-
     <div id="scanner-container">
-        <video id="video"></video>
+        <video id="video" playsinline muted autoplay></video>
         <div class="ui-overlay">
             <div class="header">
-                <h2>СКАН МАРКИ</h2>
-                <p style="font-size: 12px; color: #ccc;">Наведите линию на DataMatrix</p>
+                <button id="start-btn">ВКЛЮЧИТЬ КАМЕРУ</button>
             </div>
             <div class="laser-line"></div>
             <div class="footer">
@@ -38,27 +36,16 @@
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        tg.ready();
-
-        const codeReader = new ZXing.BrowserMultiFormatReader();
-        const videoElement = document.getElementById('video');
         
-        // Настройка только на DataMatrix для скорости
-        const hints = new Map();
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.DATA_MATRIX]);
-        codeReader.setHints(hints);
+        const codeReader = new ZXing.BrowserMultiFormatReader();
+        const startBtn = document.getElementById('start-btn');
 
-        async function startScanner() {
-            const constraints = {
-                video: { 
-                    facingMode: "environment",
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
-            };
-
+        startBtn.onclick = async () => {
             try {
-                // Запуск потока видео с автоматическим выбором камеры
+                const constraints = {
+                    video: { facingMode: "environment" }
+                };
+                
                 await codeReader.decodeFromConstraints(constraints, 'video', (result, err) => {
                     if (result) {
                         if (navigator.vibrate) navigator.vibrate(100);
@@ -66,16 +53,14 @@
                         setTimeout(() => tg.close(), 150);
                     }
                 });
+                
+                startBtn.style.display = 'none'; // Скрываем кнопку после запуска
             } catch (error) {
-                console.error(error);
-                alert("Ошибка доступа к камере. Проверьте разрешения в настройках телефона.");
+                alert("Ошибка: " + error);
             }
-        }
+        };
 
         document.getElementById('close-btn').onclick = () => tg.close();
-
-        // Запускаем
-        window.addEventListener('load', startScanner);
     </script>
 </body>
 </html>
