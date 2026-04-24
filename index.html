@@ -2,33 +2,33 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>Scanner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Scanner Pro</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #scanner-container { position: relative; width: 100%; flex-grow: 1; background: #000; }
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; height: 100vh; overflow: hidden; }
+        #scanner-container { position: relative; width: 100%; height: 100vh; }
         #video { width: 100%; height: 100%; object-fit: cover; }
-        .ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; align-items: center; z-index: 10; }
-        .header { background: rgba(0,0,0,0.8); width: 100%; padding: 20px 0; text-align: center; }
-        #start-btn { pointer-events: auto; background: #00e676; border: none; padding: 15px 30px; border-radius: 30px; font-weight: bold; font-size: 16px; margin-top: 10px; box-shadow: 0 4px 15px rgba(0,230,118,0.4); }
-        .laser-line { position: absolute; top: 50%; width: 80%; height: 2px; background: #ff1744; box-shadow: 0 0 10px #ff1744; animation: scan 2s infinite; }
-        @keyframes scan { 0%, 100% { transform: translateY(-100px); } 50% { transform: translateY(100px); } }
-        .footer { position: absolute; bottom: 30px; pointer-events: auto; }
-        #close-btn { background: rgba(255,255,255,0.2); border: 1px solid #fff; color: #fff; padding: 10px 30px; border-radius: 20px; }
+        .ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; align-items: center; }
+        .header { background: rgba(0,0,0,0.7); width: 100%; padding: 15px; text-align: center; }
+        .laser { position: absolute; top: 50%; width: 80%; height: 2px; background: #ff1744; box-shadow: 0 0 15px #ff1744; animation: scan 1.5s infinite; }
+        @keyframes scan { 0%, 100% { transform: translateY(-80px); } 50% { transform: translateY(80px); } }
+        #start-btn { pointer-events: auto; background: #00e676; border: none; padding: 15px 40px; border-radius: 30px; font-weight: bold; margin-top: 10px; }
+        .footer { position: absolute; bottom: 40px; pointer-events: auto; }
     </style>
 </head>
 <body>
     <div id="scanner-container">
         <video id="video" playsinline muted autoplay></video>
-        <div class="ui-overlay">
+        <div class="ui">
             <div class="header">
-                <button id="start-btn">ВКЛЮЧИТЬ КАМЕРУ</button>
+                <button id="start-btn">ЗАПУСТИТИ СКАНЕР</button>
+                <p id="status" style="font-size: 12px; color: #00e676; margin-top: 5px;">Готовий до роботи</p>
             </div>
-            <div class="laser-line"></div>
+            <div class="laser"></div>
             <div class="footer">
-                <button id="close-btn">Закрыть</button>
+                <button onclick="window.Telegram.WebApp.close()" style="background:none; border:1px solid #fff; color:#fff; padding:10px 20px; border-radius:20px;">Закрити</button>
             </div>
         </div>
     </div>
@@ -39,28 +39,47 @@
         
         const codeReader = new ZXing.BrowserMultiFormatReader();
         const startBtn = document.getElementById('start-btn');
+        const status = document.getElementById('status');
+
+        // Налаштування на DataMatrix
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.DATA_MATRIX]);
+        codeReader.setHints(hints);
 
         startBtn.onclick = async () => {
             try {
                 const constraints = {
-                    video: { facingMode: "environment" }
+                    video: { 
+                        facingMode: "environment",
+                        focusMode: "continuous",
+                        whiteBalanceMode: "continuous"
+                    }
                 };
                 
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                const videoTrack = stream.getVideoTracks()[0];
+                
+                // Спробуємо увімкнути зум, якщо телефон дозволяє (для малих марок)
+                const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+                if (capabilities.zoom) {
+                    await videoTrack.applyConstraints({ advanced: [{ zoom: capabilities.zoom.min + 1 }] });
+                }
+
                 await codeReader.decodeFromConstraints(constraints, 'video', (result, err) => {
                     if (result) {
-                        if (navigator.vibrate) navigator.vibrate(100);
+                        status.innerText = "ЗЧИТАНО!";
+                        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
                         tg.sendData(result.text);
-                        setTimeout(() => tg.close(), 150);
+                        setTimeout(() => tg.close(), 200);
                     }
                 });
                 
-                startBtn.style.display = 'none'; // Скрываем кнопку после запуска
+                startBtn.style.display = 'none';
+                status.innerText = "Шукаю DataMatrix...";
             } catch (error) {
-                alert("Ошибка: " + error);
+                alert("Помилка: " + error);
             }
         };
-
-        document.getElementById('close-btn').onclick = () => tg.close();
     </script>
 </body>
 </html>
