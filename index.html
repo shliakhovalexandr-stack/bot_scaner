@@ -3,74 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Scanner</title>
+    <title>Photo Scanner</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: sans-serif; height: 100vh; overflow: hidden; }
-        #video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
+        #video { width: 100%; height: 100%; object-fit: cover; position: absolute; }
+        #canvas { display: none; } /* Скрытый холст для обработки фото */
         .ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; z-index: 10; }
         .target-box { width: 220px; height: 220px; border: 2px solid #00e676; border-radius: 15px; position: relative; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); }
-        .target-box::after { content: ""; position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: #ff1744; box-shadow: 0 0 8px #ff1744; animation: scan 2s infinite ease-in-out; }
-        @keyframes scan { 0%, 100% { top: 10%; } 50% { top: 90%; } }
-        .controls { position: absolute; top: 30px; pointer-events: auto; }
-        #btn { background: #00e676; border: none; padding: 15px 40px; border-radius: 30px; font-weight: bold; font-size: 18px; color: #000; }
-        .footer { position: absolute; bottom: 30px; pointer-events: auto; }
+        .controls { position: absolute; bottom: 100px; pointer-events: auto; width: 100%; text-align: center; }
+        #capture-btn { background: #ff1744; border: none; width: 80px; height: 80px; border-radius: 50%; border: 5px solid #fff; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
+        #status { position: absolute; top: 30px; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 20px; font-size: 14px; color: #00e676; }
     </style>
 </head>
 <body>
     <video id="video" playsinline muted autoplay></video>
+    <canvas id="canvas"></canvas>
+    
     <div class="ui">
-        <div class="controls">
-            <button id="btn">УВІМКНУТИ КАМЕРУ</button>
-        </div>
+        <div id="status">Наведіть на марку і натисніть кнопку</div>
         <div class="target-box"></div>
-        <div class="footer">
-            <button onclick="window.Telegram.WebApp.close()" style="background:rgba(255,255,255,0.2); border:1px solid #fff; color:#fff; padding:10px 20px; border-radius:20px;">Закрити</button>
+        <div class="controls">
+            <button id="capture-btn"></button>
+            <p style="margin-top:10px; font-weight:bold;">НАТИСНІТЬ ДЛЯ СКАНУ</p>
         </div>
+        <button onclick="window.Telegram.WebApp.close()" style="position: absolute; bottom: 30px; pointer-events: auto; color:#fff; background:none; border:none;">Закрити</button>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        
+
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('capture-btn');
+        const status = document.getElementById('status');
         const codeReader = new ZXing.BrowserMultiFormatReader();
-        const btn = document.getElementById('btn');
 
-        // Налаштування для DataMatrix
-        const hints = new Map();
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.DATA_MATRIX]);
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-        codeReader.setHints(hints);
-
-        btn.onclick = async () => {
+        // Запуск камеры при старте
+        async function initCamera() {
             try {
-                // Отримуємо список камер
-                const videoDevices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
-                
-                // Вибираємо задню камеру (зазвичай остання в списку)
-                const selectedDeviceId = videoDevices.length > 1 
-                    ? videoDevices[videoDevices.length - 1].deviceId 
-                    : videoDevices[0].deviceId;
-
-                // Запуск через вбудований метод бібліотеки
-                await codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
-                    if (result) {
-                        if (navigator.vibrate) navigator.vibrate(100);
-                        tg.sendData(result.text);
-                        setTimeout(() => tg.close(), 150);
-                    }
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } 
                 });
-                
-                btn.style.display = 'none';
-                
-                // Лайфхак для iPhone: примусово "штовхаємо" відео, якщо воно не пішло
-                document.getElementById('video').play();
-                
-            } catch (e) {
-                alert("Помилка: " + e.message);
+                video.srcObject = stream;
+                await video.play();
+            } catch (err) {
+                alert("Камера не доступна: " + err.message);
+            }
+        }
+
+        captureBtn.onclick = async () => {
+            status.innerText = "Обробка...";
+            status.style.color = "#ffeb3b";
+
+            // Рисуем текущий кадр видео на холст (делаем "скриншот")
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            try {
+                // Пытаемся найти код на этом снимке
+                const result = await codeReader.decodeFromCanvas(canvas);
+                if (result) {
+                    status.innerText = "ЗЧИТАНО!";
+                    status.style.color = "#00e676";
+                    if (navigator.vibrate) navigator.vibrate(100);
+                    tg.sendData(result.text);
+                    setTimeout(() => tg.close(), 500);
+                }
+            } catch (err) {
+                status.innerText = "Не вдалося розпізнати. Спробуйте ще раз";
+                status.style.color = "#ff1744";
+                if (navigator.vibrate) navigator.vibrate(50);
             }
         };
+
+        window.onload = initCamera;
     </script>
 </body>
 </html>
