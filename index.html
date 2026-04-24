@@ -2,31 +2,31 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Scanner Final</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Scanner</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; height: 100vh; overflow: hidden; }
-        #video { width: 100%; height: 100%; object-fit: cover; }
-        .ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        #video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
+        .ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
         
         /* Рамка прицілу */
-        .target-box { width: 220px; height: 220px; border: 2px solid #00e676; border-radius: 15px; position: relative; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); }
+        .target-box { width: 200px; height: 200px; border: 2px solid #00e676; border-radius: 15px; position: relative; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); }
         .target-box::after { content: ""; position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: #ff1744; box-shadow: 0 0 8px #ff1744; animation: scan 2s infinite ease-in-out; }
         
         @keyframes scan { 0%, 100% { top: 10%; } 50% { top: 90%; } }
         
-        .controls { position: absolute; top: 20px; pointer-events: auto; }
-        #btn { background: #00e676; border: none; padding: 15px 30px; border-radius: 25px; font-weight: bold; }
-        .footer { position: absolute; bottom: 30px; pointer-events: auto; }
+        .controls { position: absolute; top: 20px; pointer-events: auto; z-index: 10; }
+        #btn { background: #00e676; border: none; padding: 15px 30px; border-radius: 25px; font-weight: bold; color: #000; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .footer { position: absolute; bottom: 30px; pointer-events: auto; z-index: 10; }
     </style>
 </head>
 <body>
     <video id="video" playsinline muted autoplay></video>
     <div class="ui">
         <div class="controls">
-            <button id="btn">УВІМКНУТИ СКАНЕР</button>
+            <button id="btn">УВІМКНУТИ КАМЕРУ</button>
         </div>
         <div class="target-box"></div>
         <div class="footer">
@@ -41,22 +41,19 @@
         const codeReader = new ZXing.BrowserMultiFormatReader();
         const btn = document.getElementById('btn');
 
-        // Налаштовуємо пошук ТІЛЬКИ DataMatrix
+        // Налаштування тільки на DataMatrix
         const hints = new Map();
         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.DATA_MATRIX]);
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true); // Режим "шукати ретельніше"
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
         codeReader.setHints(hints);
 
         btn.onclick = async () => {
-            const constraints = {
-                video: { 
-                    facingMode: "environment",
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
-            };
-
             try {
+                // Мінімальні налаштування для максимальної сумісності
+                const constraints = {
+                    video: { facingMode: "environment" }
+                };
+
                 await codeReader.decodeFromConstraints(constraints, 'video', (result, err) => {
                     if (result) {
                         if (navigator.vibrate) navigator.vibrate(100);
@@ -64,9 +61,10 @@
                         setTimeout(() => tg.close(), 150);
                     }
                 });
+                
                 btn.style.display = 'none';
             } catch (e) {
-                alert("Помилка камери: " + e);
+                alert("Помилка доступу: " + e);
             }
         };
     </script>
