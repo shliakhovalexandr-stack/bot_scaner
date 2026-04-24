@@ -2,33 +2,111 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Kabak Group Scanner</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        #reader { width: 90%; border-radius: 15px; overflow: hidden; border: 2px solid #333; }
-        h2 { margin-bottom: 20px; font-size: 18px; }
+        body { margin: 0; padding: 0; background-color: #000; color: #fff; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Зона камеры на весь экран */
+        #scanner-container { position: relative; width: 100%; flex-grow: 1; overflow: hidden; }
+        #video { width: 100%; height: 100%; object-fit: cover; }
+
+        /* UI Элементы поверх камеры */
+        .ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
+        
+        .header { background: rgba(0,0,0,0.6); padding: 15px; text-align: center; backdrop-filter: blur(5px); }
+        .header h2 { margin: 0; font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #00e676; }
+        .header p { margin: 5px 0 0; font-size: 12px; color: #aaa; }
+
+        /* Анимированная лазерная линия */
+        .laser-line { position: absolute; top: 50%; left: 10%; width: 80%; height: 2px; background-color: #ff1744; box-shadow: 0 0 10px 2px rgba(255, 23, 68, 0.7); animation: scanning 2s infinite ease-in-out; transform: translateY(-50%); }
+        @keyframes scanning { 0% { top: 30%; } 50% { top: 70%; } 100% { top: 30%; } }
+
+        /* Кнопка закрытия внизу */
+        .footer { padding: 20px; display: flex; justify-content: center; pointer-events: auto; }
+        #close-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 10px 30px; border-radius: 25px; font-size: 14px; backdrop-filter: blur(5px); transition: all 0.2s; }
+        #close-btn:active { background: rgba(255,255,255,0.2); transform: scale(0.95); }
     </style>
 </head>
 <body>
-    <h2>Наведите на акцизную марку</h2>
-    <div id="reader"></div>
+
+    <div id="scanner-container">
+        <video id="video"></video>
+        
+        <div class="ui-overlay">
+            <div class="header">
+                <h2>Скан марки</h2>
+                <p>Наведите линию на DataMatrix</p>
+            </div>
+            <div class="laser-line"></div>
+            <div class="footer">
+                <button id="close-btn">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand();
+        tg.expand(); // Разворачиваем на весь экран
+        tg.ready();
 
-        const html5QrCode = new Html5Qrcode("reader");
+        const video = document.getElementById('video');
+        const closeBtn = document.getElementById('close-btn');
+        const codeReader = new ZXing.BrowserMultiFormatReader();
         
-        // Настройки сканера (ищем штрих-коды и DataMatrix)
-        const config = { fps: 15, qrbox: { width: 250, height: 150 } };
+        // Настройки только для DataMatrix (ускоряет скан в разы)
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.DATA_MATRIX]);
+        codeReader.setHints(hints);
 
-        html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-            // Как только камера «поймала» код:
-            tg.sendData(decodedText); // Бот получит этот текст
-            tg.close(); // Окно закроется само
-        }).catch(err => {
-            console.error("Ошибка камеры:", err);
-        });
+        let selectedDeviceId;
+
+        // Кнопка закрытия
+        closeBtn.onclick = () => {
+            tg.close();
+        };
+
+        // Запуск сканера
+        async function startScanner() {
+            try {
+                const videoInputDevices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
+                
+                // Выбираем заднюю камеру (обычно последняя в списке)
+                selectedDeviceId = videoInputDevices.length > 1 ? videoInputDevices[videoInputDevices.length - 1].deviceId : videoInputDevices[0].deviceId;
+
+                console.log(`Запуск камеры: ${selectedDeviceId}`);
+                
+                // Начинаем декодирование
+                codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+                    if (result) {
+                        console.log("Марка найдена:", result.text);
+                        
+                        // Виброотклик (если телефон поддерживает)
+                        if (navigator.vibrate) navigator.vibrate(100);
+                        
+                        // Отправляем данные в бот
+                        tg.sendData(result.text);
+                        
+                        // Закрываем окно через паузу, чтобы sendData успел сработать
+                        setTimeout(() => {
+                            tg.close();
+                        }, 150);
+                    }
+                    if (err && !(err instanceof ZXing.NotFoundException)) {
+                        console.error("Ошибка сканера:", err);
+                    }
+                });
+
+            } catch (error) {
+                console.error("Критическая ошибка:", error);
+                alert("Не удалось запустить камеру. Проверьте разрешения.");
+            }
+        }
+
+        // Запускаем при загрузке
+        window.addEventListener('load', startScanner);
     </script>
 </body>
 </html>
