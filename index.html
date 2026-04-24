@@ -2,75 +2,93 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>Kabak Scan Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Kabak Scan</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { margin: 0; background: #000; color: #fff; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #status { padding: 15px; color: #00e676; font-size: 14px; background: rgba(0,0,0,0.8); min-height: 40px; z-index: 10; }
-        #video-container { position: relative; flex-grow: 1; background: #111; display: flex; align-items: center; justify-content: center; }
-        #video { width: 100%; height: 100%; object-fit: cover; }
-        .target-frame { position: absolute; width: 280px; height: 180px; border: 2px solid #00e676; border-radius: 15px; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); pointer-events: none; }
-        .controls { padding: 20px; background: #000; z-index: 10; }
-        button { border: none; border-radius: 12px; font-weight: bold; font-size: 18px; width: 100%; padding: 20px; cursor: pointer; }
-        #scan-btn { background: #00e676; color: #000; }
-        #capture-btn { background: #ff1744; color: #fff; display: none; }
+        body { margin: 0; padding: 0; background: #000; font-family: sans-serif; overflow: hidden; height: 100vh; }
+        
+        #video { width: 100%; height: 100vh; object-fit: cover; }
+        
+        /* Рамка для прицілу */
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            pointer-events: none;
+        }
+        .scan-region {
+            width: 280px; height: 160px;
+            border: 3px solid #00ff00; border-radius: 15px;
+            box-shadow: 0 0 0 5000px rgba(0,0,0,0.4);
+        }
+        .hint { color: #00ff00; margin-top: 20px; font-weight: bold; background: rgba(0,0,0,0.6); padding: 5px 15px; border-radius: 10px; }
+
+        /* КНОПКА - Тепер вона точно буде! */
+        .footer {
+            position: absolute; bottom: 30px; left: 0; width: 100%;
+            display: flex; justify-content: center; z-index: 999;
+        }
+        #capture-btn {
+            background: #ff1744; color: white; border: none;
+            padding: 20px 40px; font-size: 20px; font-weight: bold;
+            border-radius: 50px; box-shadow: 0 4px 15px rgba(255,0,0,0.5);
+            cursor: pointer; active: transform: scale(0.95);
+        }
         canvas { display: none; }
     </style>
 </head>
 <body>
-    <div id="status">Натисніть "ЗАПУСТИТИ"</div>
-    <div id="video-container">
-        <video id="video" playsinline muted autoplay></video>
-        <div class="target-frame"></div>
+
+    <video id="video" playsinline autoplay></video>
+    
+    <div class="overlay">
+        <div class="scan-region"></div>
+        <div class="hint">ПОМІСТІТЬ МАРКУ В РАМКУ</div>
     </div>
+
+    <div class="footer">
+        <button id="capture-btn">ЗРОБИТИ СКАН (ФОТО)</button>
+    </div>
+
     <canvas id="canvas"></canvas>
-    <div class="controls">
-        <button id="scan-btn">ЗАПУСТИТИ КАМЕРУ</button>
-        <button id="capture-btn">ЗРОБИТИ ФОТО (СКАН)</button>
-    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand();
-
         const video = document.getElementById('video');
-        const scanBtn = document.getElementById('scan-btn');
         const captureBtn = document.getElementById('capture-btn');
-        const status = document.getElementById('status');
         const canvas = document.getElementById('canvas');
 
-        scanBtn.onclick = async () => {
-            status.innerText = "Запуск камери...";
+        tg.expand(); // Розгорнути на весь екран
+
+        // Запуск камери відразу
+        async function startCamera() {
             try {
-                // Запитуємо максимальну якість
-                const constraints = { 
-                    video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } 
-                };
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
+                });
                 video.srcObject = stream;
-                await video.play();
-                scanBtn.style.display = "none";
-                captureBtn.style.display = "block";
-                status.innerText = "Наведіть рамку на марку";
             } catch (err) {
-                status.innerText = "Помилка: " + err.message;
+                alert("Помилка камери: " + err.message);
             }
-        };
+        }
 
         captureBtn.onclick = () => {
-            status.innerText = "ВІДПРАВКА БОТУ...";
+            // Вібрація при натисканні
+            if (navigator.vibrate) navigator.vibrate(50);
+            
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // Відправляємо фото у високій якості
-            const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-            tg.sendData("OCR_IMAGE:" + imageDataUrl);
-            if (navigator.vibrate) navigator.vibrate(100);
-            setTimeout(() => tg.close(), 700);
+            const imageData = canvas.toDataURL('image/jpeg', 0.8);
+            tg.sendData("OCR_IMAGE:" + imageData);
+            
+            // Закрити вікно через секунду після відправки
+            setTimeout(() => tg.close(), 500);
         };
+
+        startCamera();
     </script>
 </body>
 </html>
