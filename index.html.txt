@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        #reader { width: 90%; border-radius: 15px; overflow: hidden; border: 2px solid #333; }
+        h2 { margin-bottom: 20px; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h2>Наведите на акцизную марку</h2>
+    <div id="reader"></div>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        const html5QrCode = new Html5Qrcode("reader");
+        
+        // Настройки сканера (ищем штрих-коды и DataMatrix)
+        const config = { fps: 15, qrbox: { width: 250, height: 150 } };
+
+        html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
+            // Как только камера «поймала» код:
+            tg.sendData(decodedText); // Бот получит этот текст
+            tg.close(); // Окно закроется само
+        }).catch(err => {
+            console.error("Ошибка камеры:", err);
+        });
+    </script>
+</body>
+</html>
