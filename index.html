@@ -2,27 +2,33 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Scanner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Kabak Scanner</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #000; color: #fff; text-align: center; font-family: sans-serif; }
-        #video { width: 100vw; height: 70vh; object-fit: cover; background: #222; }
-        .controls { padding: 20px; }
-        #scan-btn { background: #00e676; border: none; padding: 20px 40px; border-radius: 10px; font-weight: bold; font-size: 18px; width: 80%; }
-        #capture-btn { background: #ff1744; border: none; padding: 20px 40px; border-radius: 10px; font-weight: bold; font-size: 18px; width: 80%; display: none; margin-top: 10px; }
-        #status { padding: 10px; color: #00e676; min-height: 20px; }
+        body { margin: 0; background: #000; color: #fff; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #status { padding: 15px; color: #00e676; font-size: 14px; background: rgba(0,0,0,0.8); z-index: 10; }
+        #video-container { position: relative; flex-grow: 1; background: #222; overflow: hidden; }
+        #video { width: 100%; height: 100%; object-fit: cover; }
+        .controls { padding: 25px; background: #000; z-index: 10; }
+        button { border: none; border-radius: 12px; font-weight: bold; font-size: 16px; width: 100%; cursor: pointer; transition: 0.2s; }
+        #scan-btn { background: #00e676; color: #000; padding: 20px; }
+        #capture-btn { background: #ff1744; color: #fff; padding: 20px; display: none; }
         canvas { display: none; }
     </style>
 </head>
 <body>
-    <div id="status">Натисніть кнопку запуску</div>
-    <video id="video" playsinline muted autoplay></video>
+    <div id="status">Натисніть кнопку для запуску камери</div>
+    
+    <div id="video-container">
+        <video id="video" playsinline muted autoplay></video>
+    </div>
+    
     <canvas id="canvas"></canvas>
 
     <div class="controls">
-        <button id="scan-btn">1. ЗАПУСТИТИ КАМЕРУ</button>
+        <button id="scan-btn">1. ЗАПУСТИТИ ЗАДНЮ КАМЕРУ</button>
         <button id="capture-btn">2. СКАНУВАТИ МАРКУ</button>
     </div>
 
@@ -37,38 +43,55 @@
         const canvas = document.getElementById('canvas');
         const codeReader = new ZXing.BrowserMultiFormatReader();
 
+        // Налаштування для читання DataMatrix
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.DATA_MATRIX]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        codeReader.setHints(hints);
+
         scanBtn.onclick = async () => {
-            status.innerText = "Запит доступу...";
+            status.innerText = "Запит доступу до задньої камери...";
             try {
-                // Найпростіший запит без жодних додаткових параметрів
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // Вимога саме задньої камери
+                const constraints = { 
+                    video: { facingMode: "environment" } 
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = stream;
-                video.setAttribute("playsinline", true); // важливо для iOS
+                video.setAttribute("playsinline", true);
                 await video.play();
                 
-                status.innerText = "Камера готова!";
+                status.innerText = "Камера готова! Наведіть на код.";
                 scanBtn.style.display = "none";
                 captureBtn.style.display = "block";
             } catch (err) {
                 status.innerText = "Помилка: " + err.name;
-                alert("Треба дозволити камеру в налаштуваннях Telegram/iPhone");
+                alert("Не вдалося активувати задню камеру. Перевірте дозволи в налаштуваннях iPhone.");
             }
         };
 
         captureBtn.onclick = async () => {
-            status.innerText = "АНАЛІЗ...";
+            status.innerText = "АНАЛІЗУЮ...";
+            
+            // Малюємо кадр на полотно
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             try {
+                // Спроба розпізнати код з фото
                 const result = await codeReader.decodeFromCanvas(canvas);
                 if (result) {
+                    status.innerText = "ЗЧИТАНО!";
+                    if (navigator.vibrate) navigator.vibrate(100);
                     tg.sendData(result.text);
-                    tg.close();
+                    setTimeout(() => tg.close(), 500);
                 }
             } catch (e) {
-                status.innerText = "Не зчитано. Спробуйте ще раз.";
+                status.innerText = "Не вдалося зчитати. Спробуйте інший ракурс/відстань.";
+                if (navigator.vibrate) navigator.vibrate(50);
             }
         };
     </script>
