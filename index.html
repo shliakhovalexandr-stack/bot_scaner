@@ -2,19 +2,19 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Scanner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Photo Scan</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: sans-serif; height: 100vh; overflow: hidden; }
-        #video { width: 100%; height: 100%; object-fit: cover; position: absolute; }
-        #canvas { display: none; } /* Скрытый холст для обработки фото */
+        #video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
+        canvas { display: none; }
         .ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; z-index: 10; }
-        .target-box { width: 220px; height: 220px; border: 2px solid #00e676; border-radius: 15px; position: relative; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); }
-        .controls { position: absolute; bottom: 100px; pointer-events: auto; width: 100%; text-align: center; }
-        #capture-btn { background: #ff1744; border: none; width: 80px; height: 80px; border-radius: 50%; border: 5px solid #fff; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
-        #status { position: absolute; top: 30px; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 20px; font-size: 14px; color: #00e676; }
+        .target-box { width: 260px; height: 180px; border: 3px solid #00e676; border-radius: 15px; position: relative; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); }
+        .controls { position: absolute; bottom: 80px; pointer-events: auto; width: 100%; text-align: center; }
+        #capture-btn { background: #ff1744; border: 5px solid #fff; width: 70px; height: 70px; border-radius: 50%; cursor: pointer; box-shadow: 0 0 15px rgba(0,0,0,0.5); display: inline-block; }
+        #status { position: absolute; top: 40px; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 14px; color: #00e676; text-align: center; width: 80%; }
     </style>
 </head>
 <body>
@@ -22,13 +22,13 @@
     <canvas id="canvas"></canvas>
     
     <div class="ui">
-        <div id="status">Наведіть на марку і натисніть кнопку</div>
+        <div id="status">Завантаження камери...</div>
         <div class="target-box"></div>
         <div class="controls">
             <button id="capture-btn"></button>
-            <p style="margin-top:10px; font-weight:bold;">НАТИСНІТЬ ДЛЯ СКАНУ</p>
+            <p style="margin-top:10px; font-weight:bold; letter-spacing: 1px;">НАТИСНІТЬ ДЛЯ СКАНУ</p>
         </div>
-        <button onclick="window.Telegram.WebApp.close()" style="position: absolute; bottom: 30px; pointer-events: auto; color:#fff; background:none; border:none;">Закрити</button>
+        <button onclick="window.Telegram.WebApp.close()" style="position: absolute; bottom: 20px; pointer-events: auto; color:#ccc; background:none; border:none; font-size: 14px;">Скасувати</button>
     </div>
 
     <script>
@@ -41,31 +41,42 @@
         const status = document.getElementById('status');
         const codeReader = new ZXing.BrowserMultiFormatReader();
 
-        // Запуск камеры при старте
-        async function initCamera() {
+        // Налаштування для DataMatrix
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.DATA_MATRIX]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        codeReader.setHints(hints);
+
+        async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } 
+                    video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
                 });
                 video.srcObject = stream;
-                await video.play();
+                // Примусовий запуск для iOS
+                video.onloadedmetadata = () => {
+                    video.play();
+                    status.innerText = "Наведіть на код та натисніть";
+                };
             } catch (err) {
-                alert("Камера не доступна: " + err.message);
+                status.innerText = "Помилка камери: " + err.message;
             }
         }
 
         captureBtn.onclick = async () => {
-            status.innerText = "Обробка...";
+            if (video.readyState < 2) return; // Відео ще не готове
+
+            status.innerText = "АНАЛІЗ ФОТО...";
             status.style.color = "#ffeb3b";
 
-            // Рисуем текущий кадр видео на холст (делаем "скриншот")
+            // Робимо знімок
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             try {
-                // Пытаемся найти код на этом снимке
+                // Скануємо отримане фото
                 const result = await codeReader.decodeFromCanvas(canvas);
                 if (result) {
                     status.innerText = "ЗЧИТАНО!";
@@ -75,13 +86,13 @@
                     setTimeout(() => tg.close(), 500);
                 }
             } catch (err) {
-                status.innerText = "Не вдалося розпізнати. Спробуйте ще раз";
+                status.innerText = "Не розпізнано. Спробуйте інший ракурс";
                 status.style.color = "#ff1744";
                 if (navigator.vibrate) navigator.vibrate(50);
             }
         };
 
-        window.onload = initCamera;
+        window.onload = startCamera;
     </script>
 </body>
 </html>
