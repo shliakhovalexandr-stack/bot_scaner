@@ -2,31 +2,32 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>Kabak Scanner Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Scanner</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: sans-serif; height: 100vh; overflow: hidden; }
-        #video { width: 100%; height: 100%; object-fit: cover; position: absolute; }
-        .ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
-        .target-box { width: 240px; height: 160px; border: 3px solid #00e676; border-radius: 10px; position: relative; box-shadow: 0 0 0 1000px rgba(0,0,0,0.6); }
-        .laser { position: absolute; width: 100%; height: 2px; background: #ff1744; box-shadow: 0 0 10px #ff1744; animation: scan 1.5s infinite ease-in-out; }
+        #video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
+        .ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; z-index: 10; }
+        .target-box { width: 220px; height: 220px; border: 2px solid #00e676; border-radius: 15px; position: relative; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); }
+        .target-box::after { content: ""; position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: #ff1744; box-shadow: 0 0 8px #ff1744; animation: scan 2s infinite ease-in-out; }
         @keyframes scan { 0%, 100% { top: 10%; } 50% { top: 90%; } }
         .controls { position: absolute; top: 30px; pointer-events: auto; }
-        #btn { background: #00e676; border: none; padding: 15px 40px; border-radius: 30px; font-weight: bold; font-size: 16px; }
+        #btn { background: #00e676; border: none; padding: 15px 40px; border-radius: 30px; font-weight: bold; font-size: 18px; color: #000; }
+        .footer { position: absolute; bottom: 30px; pointer-events: auto; }
     </style>
 </head>
 <body>
     <video id="video" playsinline muted autoplay></video>
     <div class="ui">
         <div class="controls">
-            <button id="btn">УВІМКНУТИ СКАНЕР</button>
+            <button id="btn">УВІМКНУТИ КАМЕРУ</button>
         </div>
-        <div class="target-box">
-            <div class="laser"></div>
+        <div class="target-box"></div>
+        <div class="footer">
+            <button onclick="window.Telegram.WebApp.close()" style="background:rgba(255,255,255,0.2); border:1px solid #fff; color:#fff; padding:10px 20px; border-radius:20px;">Закрити</button>
         </div>
-        <button onclick="window.Telegram.WebApp.close()" style="position: absolute; bottom: 40px; pointer-events: auto; background: none; border: 1px solid #fff; color: #fff; padding: 10px 20px; border-radius: 20px;">Закрити</button>
     </div>
 
     <script>
@@ -34,10 +35,9 @@
         tg.expand();
         
         const codeReader = new ZXing.BrowserMultiFormatReader();
-        const videoElement = document.getElementById('video');
         const btn = document.getElementById('btn');
 
-        // Налаштування для складних кодів (TryHarder)
+        // Налаштування для DataMatrix
         const hints = new Map();
         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.DATA_MATRIX]);
         hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
@@ -45,18 +45,28 @@
 
         btn.onclick = async () => {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                videoElement.srcObject = stream;
-                await videoElement.play();
+                // Отримуємо список камер
+                const videoDevices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
+                
+                // Вибираємо задню камеру (зазвичай остання в списку)
+                const selectedDeviceId = videoDevices.length > 1 
+                    ? videoDevices[videoDevices.length - 1].deviceId 
+                    : videoDevices[0].deviceId;
 
-                codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+                // Запуск через вбудований метод бібліотеки
+                await codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
                     if (result) {
-                        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                        if (navigator.vibrate) navigator.vibrate(100);
                         tg.sendData(result.text);
-                        setTimeout(() => tg.close(), 100);
+                        setTimeout(() => tg.close(), 150);
                     }
                 });
+                
                 btn.style.display = 'none';
+                
+                // Лайфхак для iPhone: примусово "штовхаємо" відео, якщо воно не пішло
+                document.getElementById('video').play();
+                
             } catch (e) {
                 alert("Помилка: " + e.message);
             }
